@@ -1,0 +1,46 @@
+Resumo do que mudou em relacao a versao original
+
+Pedidos atendidos:
+- Funcoes de cadastrar, listar, buscar, atualizar e remover na memoria (vetores de structs).
+- Modulos .h/.c separados por entidade.
+- Menu de cada cadastro fora do main.c, declarado no .h e implementado no .c.
+- Gravacao em arquivo nao foi feita. salvar* e carregar* existem e estao vazias para a proxima etapa.
+
+Versao original:
+- Os .h ja tinham as structs e as declaracoes.
+- Os .c so tinham um roteiro em comentario, sem codigo.
+- O main.c tinha um menu incompleto, com a mesma variavel op no menu e no submenu, e as opcoes so imprimiam texto.
+
+O que foi implementado:
+
+cliente.c
+- Vetor de clientes e quantidade, visiveis so neste arquivo.
+- Busca por id, id automatico, cadastrar, listar, atualizar, remover e clienteExiste.
+- menuCliente.
+
+entregador.c
+- Mesmo padrao de cliente.
+- menuEntregador.
+
+produto.c
+- Cadastrar, listar, atualizar e remover.
+- Preco e estoque negativos sao recusados.
+- produtoExiste, baixarEstoque e devolverEstoque.
+- menuProduto.
+
+pedido.c
+- Cadastra so se o cliente e o produto existem, a quantidade e maior que zero e ha estoque.
+- Listar, cancelar (devolve o estoque e remove do vetor) e pedidoExiste.
+- menuPedido.
+
+entrega.c
+- Cadastra so se o pedido e o entregador existem, com status pendente.
+- Listar, marcar como entregue.
+- menuEntrega.
+
+main.c
+- So o menu principal: produto, pedido, entregador, cliente, entrega e sair.
+- Cada opcao chama o menu do modulo.
+
+Cabecalhos
+- Incluida a declaracao do menu de cada modulo. O restante das structs e funcoes permaneceu.
