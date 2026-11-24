@@ -1,177 +1,181 @@
 #include <stdio.h>
 #include <string.h>
 #include "cliente.h"
+#include "encomenda.h"
+#include "utils.h"
 
 static Cliente clientes[MAX_CLIENTES];
-static int qtdClientes = 0;
+static int total_clientes = 0;
+static int proximo_id = 1;
 
-static void lerTexto(char *dest, int tam) {
-    int c;
-    size_t n;
+void cliente_carregar(void)
+{
+    FILE *arquivo = fopen(ARQ_CLIENTES, "rb");
+    int quantidade, id_seguinte;
 
-    if (fgets(dest, tam, stdin) == NULL) {
-        dest[0] = '\0';
+    if (arquivo == NULL) return; /* primeira execucao: ainda nao ha arquivo */
+
+    if (fread(&quantidade, sizeof(int), 1, arquivo) != 1 ||
+        fread(&id_seguinte, sizeof(int), 1, arquivo) != 1 ||
+        quantidade < 0 || quantidade > MAX_CLIENTES ||
+        fread(clientes, sizeof(Cliente), (size_t)quantidade, arquivo) != (size_t)quantidade) {
+        printf("Aviso: arquivo ARQ_CLIENTES invalido ou incompleto. Dados nao carregados.\n");
+        fclose(arquivo);
         return;
     }
-    if (dest[0] == '\n') {
-        if (fgets(dest, tam, stdin) == NULL) {
-            dest[0] = '\0';
-            return;
-        }
-    }
-    n = strlen(dest);
-    if (n > 0 && dest[n - 1] == '\n') {
-        dest[n - 1] = '\0';
-    } else {
-        while ((c = getchar()) != '\n' && c != EOF) {
-        }
-    }
+
+    total_clientes = quantidade;
+    proximo_id = id_seguinte > 0 ? id_seguinte : 1;
+    fclose(arquivo);
 }
 
-static int lerInteiro(int *dest) {
-    int c;
+int cliente_salvar(void)
+{
+    FILE *arquivo = fopen(ARQ_CLIENTES, "wb");
+    int sucesso = 1;
 
-    if (scanf("%d", dest) != 1) {
-        while ((c = getchar()) != '\n' && c != EOF) {
-        }
+    if (arquivo == NULL) {
+        printf("Erro ao salvar ARQ_CLIENTES.\n");
         return 0;
     }
-    return 1;
+
+    if (fwrite(&total_clientes, sizeof(int), 1, arquivo) != 1 ||
+        fwrite(&proximo_id, sizeof(int), 1, arquivo) != 1 ||
+        fwrite(clientes, sizeof(Cliente), (size_t)total_clientes, arquivo) != (size_t)total_clientes)
+        sucesso = 0;
+
+    if (fclose(arquivo) != 0) sucesso = 0;
+    if (!sucesso) printf("Erro ao gravar ARQ_CLIENTES.\n");
+    return sucesso;
 }
 
-static int buscarIndiceCliente(int id) {
+
+Cliente *cliente_buscar_por_id(int id)
+{
     int i;
 
-    for (i = 0; i < qtdClientes; i++) {
-        if (clientes[i].id == id) {
-            return i;
+    for (i = 0; i < total_clientes; i++)
+        if (clientes[i].ativo && clientes[i].id == id) return &clientes[i];
+    return NULL;
+}
+
+const char *cliente_nome_por_id(int id)
+{
+    int i;
+
+    for (i = 0; i < total_clientes; i++)
+        if (clientes[i].id == id) return clientes[i].nome;
+    return "?";
+}
+
+static int cpf_ja_cadastrado(const char *cpf)
+{
+    int i;
+
+    for (i = 0; i < total_clientes; i++)
+        if (clientes[i].ativo && strcmp(clientes[i].cpf, cpf) == 0) return 1;
+    return 0;
+}
+
+static Cliente *pedir_cliente(void)
+{
+    Cliente *c = cliente_buscar_por_id(ler_inteiro("ID do cliente: "));
+
+    if (c == NULL) printf("Cliente nao encontrado!\n");
+    return c;
+}
+
+static void exibir_cliente(const Cliente *c)
+{
+    printf(" [%d] %s | CPF: %s | Tel: %s\n", c->id, c->nome, c->cpf, c->telefone);
+    printf("     Endereco: %s\n", c->endereco);
+}
+
+void cliente_cadastrar(void)
+{
+    Cliente novo;
+
+    if (total_clientes >= MAX_CLIENTES) {
+        printf("Limite de clientes atingido!\n");
+        return;
+    }
+
+    memset(&novo, 0, sizeof(novo));
+    ler_texto_obrigatorio("Nome: ", novo.nome, TAM_NOME);
+    ler_texto_obrigatorio("CPF: ", novo.cpf, TAM_CPF);
+    if (!cpf_valido(novo.cpf)) {
+        printf("CPF invalido! Cadastro cancelado.\n");
+        return;
+    }
+    if (cpf_ja_cadastrado(novo.cpf)) {
+        printf("CPF ja cadastrado! Cadastro cancelado.\n");
+        return;
+    }
+    ler_texto_obrigatorio("Telefone: ", novo.telefone, TAM_TELEFONE);
+    ler_texto_obrigatorio("Endereco: ", novo.endereco, TAM_ENDERECO);
+
+    novo.id = proximo_id++;
+    novo.ativo = 1;
+    clientes[total_clientes++] = novo;
+    printf("Cliente cadastrado! ID: %d\n", novo.id);
+}
+
+void cliente_listar(void)
+{
+    int i, qtd = 0;
+
+    for (i = 0; i < total_clientes; i++) {
+        if (clientes[i].ativo) {
+            exibir_cliente(&clientes[i]);
+            qtd++;
         }
     }
-    return -1;
+    if (qtd == 0) printf("Nenhum cliente cadastrado.\n");
 }
 
-static int proximoIdCliente(void) {
-    int i;
-    int maior = 0;
+void cliente_buscar(void)
+{
+    char termo[TAM_NOME];
+    int i, qtd = 0;
 
-    for (i = 0; i < qtdClientes; i++) {
-        if (clientes[i].id > maior) {
-            maior = clientes[i].id;
+    ler_texto_obrigatorio("Buscar (parte do nome ou CPF): ", termo, TAM_NOME);
+    for (i = 0; i < total_clientes; i++) {
+        if (clientes[i].ativo &&
+            (contem_texto(clientes[i].nome, termo) || contem_texto(clientes[i].cpf, termo))) {
+            exibir_cliente(&clientes[i]);
+            qtd++;
         }
     }
-    return maior + 1;
+    if (qtd == 0) printf("Nenhum cliente encontrado.\n");
 }
 
-void cadastrarCliente(void) {
-    Cliente *c;
+void cliente_atualizar(void)
+{
+    Cliente *c = pedir_cliente();
 
-    if (qtdClientes >= MAX_CLIENTES) {
-        printf("Limite de clientes atingido.\n");
+    if (c == NULL) return;
+
+    printf("Enter mantem o valor atual (CPF nao pode ser alterado).\n");
+    atualizar_texto("Nome", c->nome, TAM_NOME);
+    atualizar_texto("Telefone", c->telefone, TAM_TELEFONE);
+    atualizar_texto("Endereco", c->endereco, TAM_ENDERECO);
+    printf("Cliente atualizado!\n");
+}
+
+void cliente_remover(void)
+{
+    Cliente *c = pedir_cliente();
+
+    if (c == NULL) return;
+
+    if (encomenda_cliente_em_andamento(c->id)) {
+        printf("Cliente possui encomendas em andamento! Remocao cancelada.\n");
         return;
     }
-
-    c = &clientes[qtdClientes];
-    c->id = proximoIdCliente();
-    printf("Nome: ");
-    lerTexto(c->nome, (int)sizeof(c->nome));
-    printf("Telefone: ");
-    lerTexto(c->telefone, (int)sizeof(c->telefone));
-    qtdClientes++;
-    printf("Cliente cadastrado com id %d.\n", c->id);
-}
-
-void listarClientes(void) {
-    int i;
-
-    if (qtdClientes == 0) {
-        printf("Nenhum cliente cadastrado.\n");
+    if (!confirmar("Confirmar remocao (s/n)? ")) {
+        printf("Remocao cancelada.\n");
         return;
     }
-
-    for (i = 0; i < qtdClientes; i++) {
-        printf("ID: %d | Nome: %s | Telefone: %s\n",
-               clientes[i].id, clientes[i].nome, clientes[i].telefone);
-    }
-}
-
-void atualizarCliente(void) {
-    int id;
-    int indice;
-
-    printf("ID do cliente: ");
-    if (!lerInteiro(&id)) {
-        printf("Entrada invalida.\n");
-        return;
-    }
-
-    indice = buscarIndiceCliente(id);
-    if (indice < 0) {
-        printf("Cliente nao encontrado.\n");
-        return;
-    }
-
-    printf("Novo nome: ");
-    lerTexto(clientes[indice].nome, (int)sizeof(clientes[indice].nome));
-    printf("Novo telefone: ");
-    lerTexto(clientes[indice].telefone, (int)sizeof(clientes[indice].telefone));
-    printf("Cliente atualizado.\n");
-}
-
-void removerCliente(void) {
-    int id;
-    int indice;
-    int i;
-
-    printf("ID do cliente: ");
-    if (!lerInteiro(&id)) {
-        printf("Entrada invalida.\n");
-        return;
-    }
-
-    indice = buscarIndiceCliente(id);
-    if (indice < 0) {
-        printf("Cliente nao encontrado.\n");
-        return;
-    }
-
-    for (i = indice; i < qtdClientes - 1; i++) {
-        clientes[i] = clientes[i + 1];
-    }
-    qtdClientes--;
-    printf("Cliente removido.\n");
-}
-
-int clienteExiste(int id) {
-    return buscarIndiceCliente(id) >= 0;
-}
-
-void menuCliente(void) {
-    int sub;
-
-    printf("Voce esta no menu de CLIENTES. Selecione uma opcao:\n");
-    printf("[1] Criar cliente\n");
-    printf("[2] Editar cliente\n");
-    printf("[3] Remover cliente\n");
-    printf("[4] Listar clientes\n");
-    printf("[5] Voltar\n");
-    if (!lerInteiro(&sub)) {
-        printf("Entrada invalida.\n");
-        return;
-    }
-
-    if (sub == 1) {
-        cadastrarCliente();
-    } else if (sub == 2) {
-        atualizarCliente();
-    } else if (sub == 3) {
-        removerCliente();
-    } else if (sub == 4) {
-        listarClientes();
-    }
-}
-
-void salvarClientes(void) {
-}
-
-void carregarClientes(void) {
+    c->ativo = 0;
+    printf("Cliente removido!\n");
 }
